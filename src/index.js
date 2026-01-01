@@ -41,7 +41,7 @@ app.use(helmet({
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://cuddle-client.netlify.app', // Example
+    'https://cuddle-new.netlify.app',
     process.env.CLIENT_URL
 ].filter(Boolean);
 
