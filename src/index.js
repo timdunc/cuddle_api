@@ -16,6 +16,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes.js';
 import blobRoutes from './routes/blobRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import webrtcRoutes from './routes/webrtcRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -97,6 +98,7 @@ app.get('/api', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/blobs', blobRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/webrtc', webrtcRoutes);
 
 // 404 handler
 app.use((req, res) => {
