@@ -34,6 +34,19 @@ const userSchema = new mongoose.Schema({
         default: null,
     },
 
+    // ECDH Public Key (Base64 SPKI)
+    // Allows partners to derive shared secret
+    publicKey: {
+        type: String,
+        default: null
+    },
+
+    // RSA Public Key (Base64 SPKI) for Hybrid Encryption
+    rsaPublicKey: {
+        type: String,
+        default: null
+    },
+
     // Partner invite code (for linking)
     inviteCode: {
         type: String,
@@ -41,7 +54,6 @@ const userSchema = new mongoose.Schema({
         sparse: true,
     },
 
-    // Push notification subscription (encrypted)
     // Push notification subscription (Plain JSON for server use)
     pushSubscription: {
         endpoint: String,
@@ -73,6 +85,37 @@ const userSchema = new mongoose.Schema({
     typingAt: {
         type: Date,
         default: null,
+    },
+
+    // Enhanced presence tracking
+    isVisible: {
+        type: Boolean,
+        default: true, // If app tab is visible
+    },
+    isFocused: {
+        type: Boolean,
+        default: true, // If window has focus
+    },
+    status: {
+        type: String,
+        enum: ['online', 'away', 'offline'],
+        default: 'offline',
+    },
+
+    // Partner Link Celebration Flag
+    showConnectionCelebration: {
+        type: Boolean,
+        default: false,
+    },
+
+    // Partner-Assisted Recovery Blob
+    // This is the user's MDK encrypted with the PARTNER'S Public Key.
+    // The server can store it, but cannot decrypt it.
+    // Only the partner can decrypt it to assist with recovery.
+    partnerRecoveryBlob: {
+        ciphertext: String,
+        iv: String,
+        ephemeralPublicKey: String // If using ECDH for blob
     },
 });
 

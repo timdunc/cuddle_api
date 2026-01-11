@@ -35,6 +35,38 @@ router.post('/', auth, async (req, res) => {
 
         await blob.save();
 
+        // Trigger Push Notification if recipient exists
+        if (recipientId) {
+            try {
+                // Dynamic import to avoid circular dependency issues if any, though regular import is fine here
+                const NotificationService = (await import('../services/NotificationService.js')).default;
+
+                let title = 'New Message';
+                let body = 'You have a new encrypted message.';
+
+                if (type === 'shared-growth') {
+                    title = 'New Growth Entry';
+                    body = 'Your partner shared a reflection with you.';
+                } else if (type === 'shared-prayer') {
+                    title = 'New Prayer Request';
+                    body = 'Your partner shared a prayer with you.';
+                } else if (type === 'signal') {
+                    title = 'New Signal';
+                    body = 'You received a signal.';
+                }
+
+                await NotificationService.sendToUser(recipientId, {
+                    title,
+                    body,
+                    type: 'BLOB',
+                    data: { blobId: blob._id, type }
+                });
+            } catch (notifyErr) {
+                console.error('[Blob] Notification failed:', notifyErr.message);
+                // Don't fail the request just because notification failed
+            }
+        }
+
         res.status(201).json({
             id: blob._id,
             type: blob.type,

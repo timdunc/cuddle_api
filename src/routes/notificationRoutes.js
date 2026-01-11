@@ -80,5 +80,21 @@ router.post('/send-signal', auth, async (req, res) => {
     }
 });
 
+/**
+ * GET /api/notifications/config
+ * Get VAPID Public Key for client subscription
+ */
+import { VAPID_KEYS } from '../config/vapid_dev.js';
+
+/**
+ * GET /api/notifications/config
+ * Get VAPID Public Key for client subscription
+ */
+router.get('/config', auth, (req, res) => {
+    res.json({
+        publicKey: process.env.VAPID_PUBLIC_KEY || VAPID_KEYS.publicKey
+    });
+});
+
 export default router;
 

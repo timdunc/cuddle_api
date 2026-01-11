@@ -1,0 +1,8 @@
+/**
+ * VAPID Keys for development
+ * Used when env vars are not set
+ */
+export const VAPID_KEYS = {
+    publicKey: "BKKvWqgAQ5_NI4iEDkWt-yVXXFhCRPScf7KEUT2R51Gn8Mxj-dPWcZcIR-_pLPvbViUHLa8OgPO2X6cbHZR64nk",
+    privateKey: "fbNGeq4v733-_SJ-ohLuSIZ9l1kqlG3WnpQnhj2IYlY"
+};

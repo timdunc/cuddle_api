@@ -23,7 +23,7 @@ const blobSchema = new mongoose.Schema({
     // Blob type for organization
     type: {
         type: String,
-        enum: ['journal', 'prayer', 'message', 'note', 'growth', 'signal', 'shared-growth', 'shared-prayer', 'other'],
+        enum: ['journal', 'prayer', 'growth', 'message', 'shared-growth', 'shared-prayer', 'shared-verse', 'private-prayer', 'private-growth', 'private-journal', 'signal', 'voice-note', 'image', 'video'],
         required: true,
         index: true,
     },
@@ -75,6 +75,9 @@ blobSchema.pre('save', function (next) {
 
 // Compound indexes for efficient queries
 blobSchema.index({ userId: 1, type: 1, createdAt: -1 });
+blobSchema.index({ recipientId: 1, type: 1, createdAt: -1 });
+// Sync optimizations (fetching new data regardless of type)
+blobSchema.index({ userId: 1, createdAt: -1 });
 blobSchema.index({ recipientId: 1, createdAt: -1 });
 
 const Blob = mongoose.model('Blob', blobSchema);

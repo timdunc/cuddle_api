@@ -21,7 +21,13 @@ import webrtcRoutes from './routes/webrtcRoutes.js';
 // Load environment variables
 dotenv.config();
 
+// Socket.IO Setup
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import User from './models/User.js';
+
 const app = express();
+const httpServer = createServer(app);
 
 // Trust proxy for Render/Heroku/etc (required for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
@@ -41,7 +47,6 @@ app.use(helmet({
 }));
 
 // CORS
-// CORS
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
@@ -49,12 +54,9 @@ const allowedOrigins = [
     process.env.CLIENT_URL
 ].filter(Boolean);
 
-app.use(cors({
+const corsOptions = {
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
-
-        // Check if origin is allowed or is localhost
         if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('localhost') || origin.includes('netlify.app')) {
             callback(null, true);
         } else {
@@ -62,7 +64,164 @@ app.use(cors({
         }
     },
     credentials: true,
-}));
+};
+
+app.use(cors(corsOptions));
+
+// Socket.IO Initialization
+const io = new Server(httpServer, {
+    cors: {
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true
+    }
+});
+
+// Expose io to routes
+app.use((req, res, next) => {
+    req.io = io;
+    next();
+});
+
+// Socket Logic
+io.on('connection', (socket) => {
+    // console.log('[Socket] Client connected:', socket.id);
+
+    // Register User
+    socket.on('register', async (userId) => {
+        try {
+            socket.userId = userId; // Store for disconnect
+            if (!userId) return;
+
+            // Update DB
+            await User.findByIdAndUpdate(userId, {
+                isOnline: true,
+                lastActiveAt: new Date()
+            });
+
+            // Find partner and notify
+            const user = await User.findById(userId).select('partnerId');
+            if (user?.partnerId) {
+                // 1. Notify Partner that I am online
+                io.to(user.partnerId.toString()).emit('partner-status', {
+                    userId: userId,
+                    isOnline: true
+                });
+
+                // 2. Tell ME if partner is online
+                const partner = await User.findById(user.partnerId).select('isOnline');
+                if (partner) {
+                    socket.emit('partner-status', {
+                        userId: user.partnerId,
+                        isOnline: partner.isOnline || false
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('[Socket] Register error:', e);
+        }
+    });
+
+    // Heartbeat to keep user marked as online (Enhanced with visibility/focus data)
+    socket.on('heartbeat', async (data) => {
+        // Support both old format (just userId string) and new format (object with details)
+        const userId = typeof data === 'string' ? data : data?.userId;
+        if (!userId) return;
+
+        try {
+            const updateData = {
+                isOnline: true,
+                lastActiveAt: new Date()
+            };
+
+            // If enhanced data is provided, store visibility state
+            if (typeof data === 'object') {
+                updateData.isVisible = data.isVisible ?? true;
+                updateData.isFocused = data.isFocused ?? true;
+            }
+
+            await User.findByIdAndUpdate(userId, updateData);
+        } catch (e) {
+            // silent fail
+        }
+    });
+
+    // Visibility change event (when user switches tabs or minimizes)
+    socket.on('visibility', async (data) => {
+        if (!data?.userId) return;
+        try {
+            await User.findByIdAndUpdate(data.userId, {
+                isVisible: data.visible,
+                lastActiveAt: new Date()
+            });
+        } catch (e) { /* silent */ }
+    });
+
+    // Focus change event (when window gains/loses focus)
+    socket.on('focus', async (data) => {
+        if (!data?.userId) return;
+        try {
+            await User.findByIdAndUpdate(data.userId, {
+                isFocused: data.focused,
+                lastActiveAt: new Date()
+            });
+        } catch (e) { /* silent */ }
+    });
+
+    // Activity event (user interaction detected)
+    socket.on('activity', async (data) => {
+        if (!data?.userId) return;
+        try {
+            await User.findByIdAndUpdate(data.userId, {
+                isOnline: true,
+                lastActiveAt: new Date(data.timestamp || Date.now())
+            });
+        } catch (e) { /* silent */ }
+    });
+
+    // Away status event
+    socket.on('away', async (userId) => {
+        if (!userId) return;
+        try {
+            await User.findByIdAndUpdate(userId, {
+                status: 'away',
+                lastActiveAt: new Date()
+            });
+
+            // Notify partner of away status
+            const user = await User.findById(userId).select('partnerId');
+            if (user?.partnerId) {
+                io.to(user.partnerId.toString()).emit('partner-status', {
+                    userId: userId,
+                    isOnline: true,
+                    status: 'away'
+                });
+            }
+        } catch (e) { /* silent */ }
+    });
+
+    socket.on('disconnect', async () => {
+        // console.log('[Socket] Client disconnected:', socket.id);
+        if (socket.userId) {
+            try {
+                await User.findByIdAndUpdate(socket.userId, {
+                    isOnline: false,
+                    lastActiveAt: new Date()
+                });
+
+                const user = await User.findById(socket.userId).select('partnerId');
+                if (user?.partnerId) {
+                    io.to(user.partnerId.toString()).emit('partner-status', {
+                        userId: socket.userId,
+                        isOnline: false
+                    });
+                }
+            } catch (e) {
+                console.error('[Socket] Disconnect error:', e);
+            }
+        }
+    });
+});
 
 // Rate limiting - generous limits for partner communication
 const limiter = rateLimit({
@@ -73,7 +232,7 @@ const limiter = rateLimit({
 app.use('/api', limiter); // Apply rate limiting to all /api routes
 
 // Body parsing (for encrypted blobs)
-app.use(express.json({ limit: '50kb' })); // Increased for messages with emojis
+app.use(express.json({ limit: '50mb' })); // Increased for audio/image blobs
 
 // =============================================================================
 // Routes
@@ -130,11 +289,12 @@ async function startServer() {
             console.log('[DB] Running without database (development mode)');
         }
 
-        // Start server
-        app.listen(PORT, () => {
+        // Start server (Using httpServer instead of app)
+        httpServer.listen(PORT, () => {
             console.log(`[Server] cuddle. backend running on port ${PORT}`);
             console.log(`[Server] Environment: ${process.env.NODE_ENV}`);
             console.log('[Server] Zero-knowledge encryption - backend sees only ciphertext');
+            console.log('[Server] Socket.IO initialized');
         });
     } catch (error) {
         console.error('[Server] Failed to start:', error.message);
