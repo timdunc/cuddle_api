@@ -17,6 +17,8 @@ import authRoutes from './routes/authRoutes.js';
 import blobRoutes from './routes/blobRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import webrtcRoutes from './routes/webrtcRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
+import aiRoutes from './routes/aiRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -261,6 +263,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/blobs', blobRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/webrtc', webrtcRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/ai', aiRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -285,6 +289,17 @@ async function startServer() {
         if (process.env.MONGODB_URI) {
             await mongoose.connect(process.env.MONGODB_URI);
             console.log('[DB] Connected to MongoDB');
+
+            // Fix for legacy email/username indexes causing duplicate key errors
+            try {
+                await mongoose.connection.collection('users').dropIndex('email_1');
+                console.log('[DB] Dropped legacy email index');
+            } catch (e) { /* ignore */ }
+
+            try {
+                await mongoose.connection.collection('users').dropIndex('username_1');
+                console.log('[DB] Dropped legacy username index');
+            } catch (e) { /* ignore */ }
         } else {
             console.log('[DB] Running without database (development mode)');
         }

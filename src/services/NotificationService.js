@@ -4,13 +4,12 @@
  */
 import webpush from 'web-push';
 import User from '../models/User.js';
-import { VAPID_KEYS } from '../config/vapid_dev.js';
 
 // Initialize web-push
 webpush.setVapidDetails(
     process.env.VAPID_EMAIL || 'mailto:admin@cuddle.app',
-    process.env.VAPID_PUBLIC_KEY || VAPID_KEYS.publicKey,
-    process.env.VAPID_PRIVATE_KEY || VAPID_KEYS.privateKey
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
 );
 
 class NotificationService {

@@ -10,6 +10,7 @@ import express from 'express';
 import crypto from 'crypto';
 import User from '../models/User.js';
 import { generateToken, auth } from '../middleware/auth.js';
+import EmailService from '../services/EmailService.js';
 
 const router = express.Router();
 
@@ -160,9 +161,49 @@ router.get('/me', auth, async (req, res) => {
             showConnectionCelebration: user.showConnectionCelebration,
             publicKey: user.publicKey,
             rsaPublicKey: user.rsaPublicKey,
+            avatarUrl: user.avatarUrl,
+            theme: user.theme,
+            notificationsEnabled: user.notificationsEnabled
         });
     } catch (err) {
         console.error('[Auth] Me error:', err.message);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * PATCH /api/auth/me
+ * Update profile metadata (theme, notifications, avatar)
+ */
+router.patch('/me', auth, async (req, res) => {
+    try {
+        const { theme, notificationsEnabled, avatarUrl } = req.body;
+        const updates = {};
+
+        if (['dark', 'light', 'system'].includes(theme)) updates.theme = theme;
+        if (typeof notificationsEnabled === 'boolean') updates.notificationsEnabled = notificationsEnabled;
+        if (typeof avatarUrl === 'string') updates.avatarUrl = avatarUrl;
+        updates.lastActiveAt = new Date();
+        updates.isOnline = true;
+
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { $set: updates },
+            { new: true }
+        ).select('-__v');
+
+        res.json({
+            message: 'Profile updated',
+            user: {
+                id: user._id,
+                publicId: user.publicId,
+                theme: user.theme,
+                notificationsEnabled: user.notificationsEnabled,
+                avatarUrl: user.avatarUrl
+            }
+        });
+    } catch (err) {
+        console.error('[Auth] Update profile error:', err.message);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -320,7 +361,7 @@ router.post('/recovery-response', auth, async (req, res) => {
  */
 router.post('/link-partner', auth, async (req, res) => {
     try {
-        const { inviteCode } = req.body;
+        const { inviteCode, email } = req.body;
 
         if (!inviteCode) {
             return res.status(400).json({ error: 'Invite code required' });
@@ -353,6 +394,11 @@ router.post('/link-partner', auth, async (req, res) => {
         // Trigger celebration for both
         user.showConnectionCelebration = true;
         partner.showConnectionCelebration = true;
+
+        if (email) {
+            user.email = email;
+            await EmailService.sendPartnerConnectionEmail(email, partner.inviteCode, 'Your Partner');
+        }
 
         await user.save();
         await partner.save();

@@ -112,11 +112,35 @@ const userSchema = new mongoose.Schema({
     // This is the user's MDK encrypted with the PARTNER'S Public Key.
     // The server can store it, but cannot decrypt it.
     // Only the partner can decrypt it to assist with recovery.
+    // Partner-Assisted Recovery Blob
     partnerRecoveryBlob: {
         ciphertext: String,
         iv: String,
         ephemeralPublicKey: String // If using ECDH for blob
     },
+
+    // Profile Metadata (Public/Shared)
+    avatarUrl: {
+        type: String,
+        default: null
+    },
+    theme: {
+        type: String,
+        enum: ['dark', 'light', 'system'],
+        default: 'dark'
+    },
+    notificationsEnabled: {
+        type: Boolean,
+        default: true
+    },
+    // User email (optional, for notifications)
+    email: {
+        type: String,
+        unique: true,
+        sparse: true,
+        lowercase: true,
+        trim: true
+    }
 });
 
 // Update lastActiveAt on activity
